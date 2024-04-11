@@ -1,0 +1,137 @@
+version: "3"
+
+networks:
+ kong-net:
+  driver: bridge
+
+services:
+
+  #######################################
+  # Postgres: The database used by Kong
+  #######################################
+  database:
+    container_name: database
+    image: postgres:9.6
+    networks:
+      - kong-net
+    environment:
+      POSTGRES_PASSWORD: kong
+      POSTGRES_USER: kong
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    networks:
+      - kong-net
+    ports:
+      - 8080:80
+    environment:
+      PGADMIN_DEFAULT_EMAIL: pgadmin@pgadmin.com
+      PGADMIN_DEFAULT_PASSWORD: pgadmin 
+    depends_on:
+      - database
+
+  #######################################
+  # Kong database migration
+  #######################################
+  kong-migration:
+    container_name: kong-migration
+    image: kong:ubuntu
+    networks:
+      - kong-net
+    restart: on-failure
+    environment:
+      KONG_PG_HOST: database
+      KONG_DATABASE: postgres
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: postgres
+    links:
+      - database
+    depends_on:
+      - database
+    volumes:
+      - ./scripts/:/var/scripts
+    entrypoint: ["sh", "-c", "/var/scripts/wait-for-it.sh database:5432 -t 10 && /docker-entrypoint.sh kong migrations bootstrap"]
+
+  #######################################
+  # Kong: The API Gateway
+  #######################################
+  kong:
+    container_name: kong
+    image: kong:ubuntu
+    networks:
+      - kong-net
+    environment:
+      KONG_PG_HOST: database
+      KONG_ADMIN_GUI_URL: http://0.0.0.0:8002
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_PROXY_LISTEN_SSL: 0.0.0.0:8443
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_DATABASE: postgres
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: postgres
+    depends_on:
+      - kong-migration
+      - database
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8002:8002"
+      - "127.0.0.1:8444:8444"
+    volumes:
+      - ./scripts/:/var/scripts
+    entrypoint: ["sh", "-c", "/var/scripts/wait-for-it.sh database:5432 -t 10 && sleep 5 && /docker-entrypoint.sh kong docker-start"]
+
+  #######################################
+  # Konga database prepare
+  #######################################
+  konga-prepare:
+    container_name: konga-prepare
+    image: pantsel/konga:next
+    networks:
+      - kong-net
+    environment:
+      DB_ADAPTER: postgres
+      DB_DATABASE: konga_db
+    links:
+      - database
+    depends_on:
+      - database
+    volumes:
+      - ./scripts/:/var/scripts
+    entrypoint: ["sh", "-c", "/var/scripts/wait-for-it.sh database:5432 -t 10 && sleep 3 && /app/start.sh -c prepare -a postgres -u postgresql://kong:kong@database:5432/konga_db"]
+
+  #######################################
+  # Konga: Kong GUI
+  #######################################
+  konga:
+    container_name: konga
+    image: pantsel/konga:next
+    networks:
+        - kong-net
+    environment:
+      DB_ADAPTER: postgres
+      DB_HOST: database
+      DB_USER: kong
+      DB_PASSWORD: kong
+      DB_DATABASE: konga_db
+      TOKEN_SECRET: teste
+      NODE_ENV: production
+      #DB_URI
+    depends_on:
+      - database
+    ports:
+      - "1337:1337"
+    volumes:
+      - ./scripts/:/var/scripts
+    entrypoint: ["sh", "-c", "/var/scripts/wait-for-it.sh database:5432 -t 10 && sleep 5 && /app/start.sh"]
