@@ -54,7 +54,7 @@ services:
     depends_on:
       - database
     volumes:
-      - ./scripts/:/var/scripts
+      - ../scripts/:/var/scripts
     entrypoint: ["sh", "-c", "/var/scripts/wait-for-it.sh database:5432 -t 10 && /docker-entrypoint.sh kong migrations bootstrap"]
 
   #######################################
@@ -89,7 +89,7 @@ services:
       - "127.0.0.1:8002:8002"
       - "127.0.0.1:8444:8444"
     volumes:
-      - ./scripts/:/var/scripts
+      - ../scripts/:/var/scripts
     entrypoint: ["sh", "-c", "/var/scripts/wait-for-it.sh database:5432 -t 10 && sleep 5 && /docker-entrypoint.sh kong docker-start"]
 
   #######################################
@@ -108,7 +108,7 @@ services:
     depends_on:
       - database
     volumes:
-      - ./scripts/:/var/scripts
+      - ../scripts/:/var/scripts
     entrypoint: ["sh", "-c", "/var/scripts/wait-for-it.sh database:5432 -t 10 && sleep 3 && /app/start.sh -c prepare -a postgres -u postgresql://kong:kong@database:5432/konga_db"]
 
   #######################################
@@ -133,5 +133,5 @@ services:
     ports:
       - "1337:1337"
     volumes:
-      - ./scripts/:/var/scripts
+      - ../scripts/:/var/scripts
     entrypoint: ["sh", "-c", "/var/scripts/wait-for-it.sh database:5432 -t 10 && sleep 5 && /app/start.sh"]
